@@ -33,7 +33,6 @@ import com.acmerobotics.roadrunner.ftc.RawEncoder;
 import com.qualcomm.hardware.lynx.LynxModule;
 import com.qualcomm.hardware.rev.RevHubOrientationOnRobot;
 import com.qualcomm.robotcore.hardware.DcMotor;
-import com.qualcomm.robotcore.hardware.DcMotorSimple;
 import com.qualcomm.robotcore.hardware.DcMotorEx;
 import com.qualcomm.robotcore.hardware.HardwareMap;
 import com.qualcomm.robotcore.hardware.IMU;
@@ -105,6 +104,11 @@ public final class MecanumDrive {
             ));
     public final AccelConstraint defaultAccelConstraint =
             new ProfileAccelConstraint(PARAMS.minProfileAccel, PARAMS.maxProfileAccel);
+
+    public final HolonomicController holonomicController = new HolonomicController(
+            PARAMS.axialGain, PARAMS.lateralGain, PARAMS.headingGain,
+            PARAMS.axialVelGain, PARAMS.lateralVelGain, PARAMS.headingVelGain
+    );
 
     public final DcMotorEx leftFront, leftBack, rightBack, rightFront;
 
@@ -310,11 +314,7 @@ public final class MecanumDrive {
 
             PoseVelocity2d robotVelRobot = updatePoseEstimate();
 
-            PoseVelocity2dDual<Time> command = new HolonomicController(
-                    PARAMS.axialGain, PARAMS.lateralGain, PARAMS.headingGain,
-                    PARAMS.axialVelGain, PARAMS.lateralVelGain, PARAMS.headingVelGain
-            )
-                    .compute(txWorldTarget, localizer.getPose(), robotVelRobot);
+            PoseVelocity2dDual<Time> command = holonomicController.compute(txWorldTarget, localizer.getPose(), robotVelRobot);
             driveCommandWriter.write(new DriveCommandMessage(command));
 
             MecanumKinematics.WheelVelocities<Time> wheelVels = kinematics.inverse(command);
@@ -402,10 +402,8 @@ public final class MecanumDrive {
 
             PoseVelocity2d robotVelRobot = updatePoseEstimate();
 
-            PoseVelocity2dDual<Time> command = new HolonomicController(
-                    PARAMS.axialGain, PARAMS.lateralGain, PARAMS.headingGain,
-                    PARAMS.axialVelGain, PARAMS.lateralVelGain, PARAMS.headingVelGain
-            )
+
+            PoseVelocity2dDual<Time> command = holonomicController
                     .compute(txWorldTarget, localizer.getPose(), robotVelRobot);
             driveCommandWriter.write(new DriveCommandMessage(command));
 
@@ -479,10 +477,65 @@ public final class MecanumDrive {
         c.strokePolyline(xPoints, yPoints);
     }
 
-    public TrajectoryActionBuilder actionBuilder(Pose2d beginPose) {
+    public TrajectoryActionBuilder trajectoryActionBuilder(Pose2d beginPose) {
         return new TrajectoryActionBuilder(
                 TurnAction::new,
                 FollowTrajectoryAction::new,
+                new TrajectoryBuilderParams(
+                        1e-6,
+                        new ProfileParams(
+                                0.25, 0.1, 1e-2
+                        )
+                ),
+                beginPose, 0.0,
+                defaultTurnConstraints,
+                defaultVelConstraint, defaultAccelConstraint
+        );
+    }
+
+    class FollowPathAction implements Action {
+        private final DisplacementTrajectory traj;
+        private final PosePath path;
+        private final DisplacementProfile profile;
+        private double disp = 0.0;
+
+        public FollowPathAction(DisplacementTrajectory traj) {
+            this.traj = traj;
+            this.path = traj.path;
+            this.profile = traj.profile;
+        }
+
+        public FollowPathAction(TimeTrajectory timeTrajectory) {
+            this(new DisplacementTrajectory(timeTrajectory.path, timeTrajectory.profile.dispProfile));
+        }
+
+        @Override
+        public boolean run(TelemetryPacket p) {
+            PoseVelocity2d robotVel = updatePoseEstimate();
+            disp = traj.project(localizer.getPose().position, disp);
+
+            if (disp >= path.length() ||
+                    (traj.get(traj.length()).position.value().minus(localizer.getPose().position)).norm() < 2) {
+                setDrivePowers(new PoseVelocity2d(new Vector2d(0.0, 0.0), 0.0));
+                return false;
+            }
+
+            PoseVelocity2dDual<Time> command = holonomicController.compute(
+                    traj.get(disp),
+                    localizer.getPose(),
+                    robotVel
+            );
+
+            setDrivePowers(command.value());
+
+            return true;
+        }
+    }
+
+    public TrajectoryActionBuilder pathActionBuilder(Pose2d beginPose) {
+        return new TrajectoryActionBuilder(
+                TurnAction::new,
+                FollowPathAction::new,
                 new TrajectoryBuilderParams(
                         1e-6,
                         new ProfileParams(
