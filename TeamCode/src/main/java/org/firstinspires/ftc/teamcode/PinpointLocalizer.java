@@ -17,8 +17,8 @@ import java.util.Objects;
 public final class PinpointLocalizer implements Localizer {
     public static class Params {
         // mmPerTick can either be tuned manually using PinpointForwardPushTest,
-        // or by dividing the encoder revolution (counts per revolution) by the circumference of your wheels in mm
-        public double mmPerTick = 1 / GoBildaPinpointDriver.goBILDA_4_BAR_POD; // default option!
+        // or by dividing the the circumference of your odometry wheels **in mm** by the number of ticks per revolution
+        public double mmPerTick = 1 / GoBildaPinpointDriver.goBILDA_4_BAR_POD;
 
         public double parYTicks = 0.0; // y position of the parallel encoder (in tick units)
         public double perpXTicks = 0.0; // x position of the perpendicular encoder (in tick units)
