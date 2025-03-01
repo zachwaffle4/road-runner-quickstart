@@ -39,6 +39,9 @@ on line 66 of `MecanumDrive` to `1.0`.
 As `PinpointLocalizer` will now give values in inches during both tuning and operation,
 changing this value will cause the tuners to fail.
 
+On line 248, make sure that you construct your `PinpointLocalizer` using
+`localizer = new PinpointLocalizer(hardwareMap, pose)`; there is no more `inPerTick` argument.
+
 ## TuningOpModes
 
 Replace your `TuningOpModes` class with 
