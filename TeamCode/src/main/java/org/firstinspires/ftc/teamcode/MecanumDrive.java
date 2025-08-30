@@ -39,12 +39,17 @@ import com.qualcomm.robotcore.hardware.HardwareMap;
 import com.qualcomm.robotcore.hardware.IMU;
 import com.qualcomm.robotcore.hardware.VoltageSensor;
 
+import dev.nextftc.extensions.roadrunner.FollowTrajectoryCommand;
+import dev.nextftc.extensions.roadrunner.FollowTurnCommand;
+import dev.nextftc.extensions.roadrunner.NextFtcMecanumDrive;
+import dev.nextftc.extensions.roadrunner.TrajectoryCommandBuilder;
 import org.firstinspires.ftc.robotcore.external.navigation.AngleUnit;
 import org.firstinspires.ftc.robotcore.external.navigation.YawPitchRollAngles;
 import org.firstinspires.ftc.teamcode.messages.DriveCommandMessage;
 import org.firstinspires.ftc.teamcode.messages.MecanumCommandMessage;
 import org.firstinspires.ftc.teamcode.messages.MecanumLocalizerInputsMessage;
 import org.firstinspires.ftc.teamcode.messages.PoseMessage;
+import org.jetbrains.annotations.NotNull;
 
 import java.lang.Math;
 import java.util.Arrays;
@@ -52,7 +57,7 @@ import java.util.LinkedList;
 import java.util.List;
 
 @Config
-public final class MecanumDrive {
+public final class MecanumDrive extends NextFtcMecanumDrive {
     public static class Params {
         // IMU orientation
         // TODO: fill in these values based on
@@ -483,6 +488,61 @@ public final class MecanumDrive {
         return new TrajectoryActionBuilder(
                 TurnAction::new,
                 FollowTrajectoryAction::new,
+                new TrajectoryBuilderParams(
+                        1e-6,
+                        new ProfileParams(
+                                0.25, 0.1, 1e-2
+                        )
+                ),
+                beginPose, 0.0,
+                defaultTurnConstraints,
+                defaultVelConstraint, defaultAccelConstraint
+        );
+    }
+
+    HolonomicController controller = new HolonomicController(
+            PARAMS.axialGain, PARAMS.lateralGain, PARAMS.headingGain,
+            PARAMS.axialVelGain, PARAMS.lateralVelGain, PARAMS.headingVelGain
+    );
+
+    @NotNull
+    @Override
+    public HolonomicController getController() {
+        return controller;
+    }
+
+    @NotNull
+    @Override
+    public Pose2d getPose() {
+        return localizer.getPose();
+    }
+
+    @Override
+    public void setDrivePowersFF(@NotNull PoseVelocity2dDual<Time> poseVelocity2dDual) {
+        MecanumKinematics.WheelVelocities<Time> wheelVels = kinematics.inverse(poseVelocity2dDual);
+        double voltage = voltageSensor.getVoltage();
+        final MotorFeedforward feedforward = new MotorFeedforward(PARAMS.kS,
+                PARAMS.kV / PARAMS.inPerTick, PARAMS.kA / PARAMS.inPerTick);
+        double leftFrontPower = feedforward.compute(wheelVels.leftFront) / voltage;
+        double leftBackPower = feedforward.compute(wheelVels.leftBack) / voltage;
+        double rightBackPower = feedforward.compute(wheelVels.rightBack) / voltage;
+        double rightFrontPower = feedforward.compute(wheelVels.rightFront) / voltage;
+        mecanumCommandWriter.write(new MecanumCommandMessage(
+                voltage, leftFrontPower, leftBackPower, rightBackPower, rightFrontPower
+        ));
+
+        leftFront.setPower(feedforward.compute(wheelVels.leftFront) / voltage);
+        leftBack.setPower(feedforward.compute(wheelVels.leftBack) / voltage);
+        rightBack.setPower(feedforward.compute(wheelVels.rightBack) / voltage);
+        rightFront.setPower(feedforward.compute(wheelVels.rightFront) / voltage);
+    }
+
+    @Override
+    @NotNull
+    public TrajectoryCommandBuilder commandBuilder(@NotNull Pose2d beginPose) {
+        return new TrajectoryCommandBuilder(
+                turn -> new FollowTurnCommand(this, turn),
+                traj -> new FollowTrajectoryCommand(this, traj),
                 new TrajectoryBuilderParams(
                         1e-6,
                         new ProfileParams(
