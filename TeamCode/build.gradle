@@ -24,6 +24,10 @@ android {
     }
 }
 
+kotlin {
+    jvmToolchain(8)
+}
+
 repositories {
     maven {
         url = 'https://maven.brott.dev/'
@@ -38,8 +42,8 @@ dependencies {
     implementation "com.acmerobotics.roadrunner:core:1.0.1"
     implementation "com.acmerobotics.roadrunner:actions:1.0.1"
     implementation "com.acmerobotics.dashboard:dashboard:0.4.17"
-    implementation "dev.nextftc:core:1.0.0-beta.3"
-    implementation "dev.nextftc:ftc:1.0.0-beta.3"
-    implementation "dev.nextftc:hardware:1.0.0-beta.3"
-    implementation "dev.nextftc.extensions:roadrunner:1.0.0"
+    implementation "dev.nextftc:core:1.0.0"
+    implementation "dev.nextftc:ftc:1.0.0"
+    implementation "dev.nextftc:hardware:1.0.0"
+    implementation "dev.nextftc.extensions:roadrunner:1.0.1"
 }
